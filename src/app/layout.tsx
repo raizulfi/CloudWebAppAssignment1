@@ -1,6 +1,7 @@
 import "./globals.css";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
+import ThemeProvider from "../components/ThemeProvider";
 
 export const metadata = {
   title: "Assignment 1",
@@ -13,11 +14,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="dark:bg-gray-900 bg-white text-gray-900 dark:text-gray-100">
-        <Header studentNumber="Student #123456" />
-        <main className="min-h-screen p-6">{children}</main>
-        <Footer studentName="Your Name" studentNumber="Student #123456" />
+    <html lang="en" suppressHydrationWarning>
+      <body className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+        <ThemeProvider>
+          <Header studentNumber="Student #123456" />
+          <main className="min-h-screen p-6 text-gray-900 dark:text-gray-100">{children}</main>
+          <Footer studentName="Your Name" studentNumber="Student #123456" />
+        </ThemeProvider>
       </body>
     </html>
   );
