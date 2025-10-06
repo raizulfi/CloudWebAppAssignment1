@@ -8,6 +8,7 @@ export default function Home() {
 	const [tabsState, setTabsState] = useState<TabsState>({ tabs: [], activeTabId: null });
 	const [editingTab, setEditingTab] = useState<string | null>(null);
 	const [generatedCode, setGeneratedCode] = useState<string>('');
+	const [draggedTab, setDraggedTab] = useState<string | null>(null);
 
 	// Load tabs from localStorage on mount
 	useEffect(() => {
@@ -88,17 +89,62 @@ export default function Home() {
 		}));
 	};
 
-	// Prevent manual editing of tab headings to maintain chronological order
-	const handleTabHeadingEdit = (tabId: string, newHeading: string) => {
-		// Only allow editing if it maintains the Step X format
-		const stepPattern = /^Step \d+$/;
-		if (stepPattern.test(newHeading)) {
-			updateTab(tabId, { heading: newHeading });
-		} else {
-			// Revert to chronological numbering
-			const tabIndex = tabsState.tabs.findIndex(tab => tab.id === tabId);
-			updateTab(tabId, { heading: `Step ${tabIndex + 1}` });
+	// Drag and drop functionality
+	const handleDragStart = (e: React.DragEvent, tabId: string) => {
+		setDraggedTab(tabId);
+		e.dataTransfer.effectAllowed = 'move';
+		e.dataTransfer.setData('text/html', tabId);
+	};
+
+	const handleDragOver = (e: React.DragEvent) => {
+		e.preventDefault();
+		e.dataTransfer.dropEffect = 'move';
+	};
+
+	const handleDrop = (e: React.DragEvent, targetTabId: string) => {
+		e.preventDefault();
+		
+		if (!draggedTab || draggedTab === targetTabId) {
+			setDraggedTab(null);
+			return;
 		}
+
+		const draggedIndex = tabsState.tabs.findIndex(tab => tab.id === draggedTab);
+		const targetIndex = tabsState.tabs.findIndex(tab => tab.id === targetTabId);
+
+		if (draggedIndex === -1 || targetIndex === -1) {
+			setDraggedTab(null);
+			return;
+		}
+
+		// Create new array with reordered tabs
+		const newTabs = [...tabsState.tabs];
+		const draggedTabData = newTabs[draggedIndex];
+		
+		// Remove dragged tab from its current position
+		newTabs.splice(draggedIndex, 1);
+		
+		// Insert at new position
+		const newTargetIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+		newTabs.splice(newTargetIndex, 0, draggedTabData);
+
+		// Renumber all tabs chronologically
+		const renumberedTabs = newTabs.map((tab, index) => ({
+			...tab,
+			heading: `Step ${index + 1}`,
+			order: index
+		}));
+
+		setTabsState(prev => ({
+			...prev,
+			tabs: renumberedTabs
+		}));
+
+		setDraggedTab(null);
+	};
+
+	const handleDragEnd = () => {
+		setDraggedTab(null);
 	};
 
 	const generateCode = () => {
@@ -200,15 +246,23 @@ export default function Home() {
 						{tabsState.tabs.map((tab) => (
 							<div key={tab.id} className="flex items-center gap-2">
 								<button
+									draggable
+									onDragStart={(e) => handleDragStart(e, tab.id)}
+									onDragOver={handleDragOver}
+									onDrop={(e) => handleDrop(e, tab.id)}
+									onDragEnd={handleDragEnd}
 									onClick={() => setTabsState(prev => ({ ...prev, activeTabId: tab.id }))}
-									className={`px-3 py-2 rounded border text-sm ${
+									className={`px-3 py-2 rounded border text-sm cursor-move ${
 										tab.id === tabsState.activeTabId
 											? 'bg-blue-600 text-white border-blue-600'
 											: 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+									} ${
+										draggedTab === tab.id ? 'opacity-50' : ''
 									}`}
 								>
-									<span className="cursor-default">
-										{tab.heading}
+									<span className="cursor-move flex items-center gap-2">
+										<span>⋮⋮</span>
+										<span>{tab.heading}</span>
 									</span>
 								</button>
 								<button
