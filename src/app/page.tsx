@@ -9,6 +9,10 @@ export default function Home() {
 	const [editingTab, setEditingTab] = useState<string | null>(null);
 	const [generatedCode, setGeneratedCode] = useState<string>('');
 	const [draggedTab, setDraggedTab] = useState<string | null>(null);
+	const [isAnimating, setIsAnimating] = useState(false);
+	const [previousTabs, setPreviousTabs] = useState<Tab[]>([]);
+	const [dragOverTab, setDragOverTab] = useState<string | null>(null);
+	const [previewOrder, setPreviewOrder] = useState<number[]>([]);
 
 	// Load tabs from localStorage on mount
 	useEffect(() => {
@@ -59,25 +63,31 @@ export default function Home() {
 			return;
 		}
 
-		setTabsState(prev => {
-			const newTabs = prev.tabs.filter(tab => tab.id !== tabId);
-			
-			// Renumber tabs chronologically
-			const renumberedTabs = newTabs.map((tab, index) => ({
-				...tab,
-				heading: `Step ${index + 1}`,
-				order: index
-			}));
-			
-			const newActiveId = prev.activeTabId === tabId 
-				? (renumberedTabs[0]?.id || null)
-				: prev.activeTabId;
-			
-			return {
-				tabs: renumberedTabs,
-				activeTabId: newActiveId
-			};
-		});
+		setIsAnimating(true);
+		setPreviousTabs(tabsState.tabs);
+
+		setTimeout(() => {
+			setTabsState(prev => {
+				const newTabs = prev.tabs.filter(tab => tab.id !== tabId);
+				
+				// Renumber tabs chronologically
+				const renumberedTabs = newTabs.map((tab, index) => ({
+					...tab,
+					heading: `Step ${index + 1}`,
+					order: index
+				}));
+				
+				const newActiveId = prev.activeTabId === tabId 
+					? (renumberedTabs[0]?.id || null)
+					: prev.activeTabId;
+				
+				return {
+					tabs: renumberedTabs,
+					activeTabId: newActiveId
+				};
+			});
+			setIsAnimating(false);
+		}, 300);
 	};
 
 	const updateTab = (tabId: string, updates: Partial<Pick<Tab, 'heading' | 'content'>>) => {
@@ -89,16 +99,46 @@ export default function Home() {
 		}));
 	};
 
-	// Drag and drop functionality
+	// Drag and drop functionality with real-time preview
 	const handleDragStart = (e: React.DragEvent, tabId: string) => {
 		setDraggedTab(tabId);
+		setPreviewOrder(tabsState.tabs.map((_, index) => index));
 		e.dataTransfer.effectAllowed = 'move';
 		e.dataTransfer.setData('text/html', tabId);
 	};
 
-	const handleDragOver = (e: React.DragEvent) => {
+	const handleDragOver = (e: React.DragEvent, targetTabId: string) => {
 		e.preventDefault();
 		e.dataTransfer.dropEffect = 'move';
+		
+		if (!draggedTab || draggedTab === targetTabId) return;
+		
+		setDragOverTab(targetTabId);
+		
+		const draggedIndex = tabsState.tabs.findIndex(tab => tab.id === draggedTab);
+		const targetIndex = tabsState.tabs.findIndex(tab => tab.id === targetTabId);
+		
+		if (draggedIndex === -1 || targetIndex === -1) return;
+		
+		// Calculate new order for real-time preview
+		const newOrder = [...tabsState.tabs];
+		const draggedTabData = newOrder[draggedIndex];
+		
+		// Remove from current position
+		newOrder.splice(draggedIndex, 1);
+		
+		// Insert at new position
+		const newTargetIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+		newOrder.splice(newTargetIndex, 0, draggedTabData);
+		
+		// Update preview order
+		const previewIndices = newOrder.map((_, index) => index);
+		setPreviewOrder(previewIndices);
+	};
+
+	const handleDragLeave = () => {
+		setDragOverTab(null);
+		setPreviewOrder(tabsState.tabs.map((_, index) => index));
 	};
 
 	const handleDrop = (e: React.DragEvent, targetTabId: string) => {
@@ -106,6 +146,8 @@ export default function Home() {
 		
 		if (!draggedTab || draggedTab === targetTabId) {
 			setDraggedTab(null);
+			setDragOverTab(null);
+			setPreviewOrder([]);
 			return;
 		}
 
@@ -114,17 +156,16 @@ export default function Home() {
 
 		if (draggedIndex === -1 || targetIndex === -1) {
 			setDraggedTab(null);
+			setDragOverTab(null);
+			setPreviewOrder([]);
 			return;
 		}
 
-		// Create new array with reordered tabs
+		// Apply the reordering
 		const newTabs = [...tabsState.tabs];
 		const draggedTabData = newTabs[draggedIndex];
 		
-		// Remove dragged tab from its current position
 		newTabs.splice(draggedIndex, 1);
-		
-		// Insert at new position
 		const newTargetIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
 		newTabs.splice(newTargetIndex, 0, draggedTabData);
 
@@ -141,10 +182,14 @@ export default function Home() {
 		}));
 
 		setDraggedTab(null);
+		setDragOverTab(null);
+		setPreviewOrder([]);
 	};
 
 	const handleDragEnd = () => {
 		setDraggedTab(null);
+		setDragOverTab(null);
+		setPreviewOrder([]);
 	};
 
 	const generateCode = () => {
@@ -243,37 +288,67 @@ export default function Home() {
 					</div>
 					
 					<div className="space-y-2">
-						{tabsState.tabs.map((tab) => (
-							<div key={tab.id} className="flex items-center gap-2">
-								<button
-									draggable
-									onDragStart={(e) => handleDragStart(e, tab.id)}
-									onDragOver={handleDragOver}
-									onDrop={(e) => handleDrop(e, tab.id)}
-									onDragEnd={handleDragEnd}
-									onClick={() => setTabsState(prev => ({ ...prev, activeTabId: tab.id }))}
-									className={`px-3 py-2 rounded border text-sm cursor-move ${
-										tab.id === tabsState.activeTabId
-											? 'bg-blue-600 text-white border-blue-600'
-											: 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-									} ${
-										draggedTab === tab.id ? 'opacity-50' : ''
-									}`}
+						{tabsState.tabs.map((tab, index) => {
+							// Calculate visual position based on drag preview
+							const isDragging = draggedTab === tab.id;
+							const isDragOver = dragOverTab === tab.id;
+							const draggedIndex = draggedTab ? tabsState.tabs.findIndex(t => t.id === draggedTab) : -1;
+							const targetIndex = dragOverTab ? tabsState.tabs.findIndex(t => t.id === dragOverTab) : -1;
+							
+							// Calculate transform for real-time preview
+							let transform = 'translateY(0)';
+							if (isDragging) {
+								transform = 'translateY(0) scale(0.95)';
+							} else if (draggedTab && !isDragging) {
+								// Other tabs shift to make space
+								if (draggedIndex !== -1 && targetIndex !== -1) {
+									if (draggedIndex < targetIndex && index > draggedIndex && index <= targetIndex) {
+										transform = 'translateY(-8px)';
+									} else if (draggedIndex > targetIndex && index >= targetIndex && index < draggedIndex) {
+										transform = 'translateY(8px)';
+									}
+								}
+							}
+							
+							return (
+								<div 
+									key={tab.id} 
+									className={`flex items-center gap-2 transition-all duration-200 ease-out`}
+									style={{ transform }}
 								>
-									<span className="cursor-move flex items-center gap-2">
-										<span>⋮⋮</span>
-										<span>{tab.heading}</span>
-									</span>
-								</button>
-								<button
-									onClick={() => deleteTab(tab.id)}
-									className="px-2 py-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded text-sm"
-									disabled={tabsState.tabs.length <= 1}
-								>
-									−
-								</button>
-							</div>
-						))}
+									<button
+										draggable
+										onDragStart={(e) => handleDragStart(e, tab.id)}
+										onDragOver={(e) => handleDragOver(e, tab.id)}
+										onDragLeave={handleDragLeave}
+										onDrop={(e) => handleDrop(e, tab.id)}
+										onDragEnd={handleDragEnd}
+										onClick={() => setTabsState(prev => ({ ...prev, activeTabId: tab.id }))}
+										className={`px-3 py-2 rounded border text-sm cursor-move transition-all duration-200 ${
+											tab.id === tabsState.activeTabId
+												? 'bg-blue-600 text-white border-blue-600 scale-105'
+												: 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 hover:scale-102'
+										} ${
+											isDragging ? 'opacity-50 scale-95 shadow-lg' : ''
+										} ${
+											isDragOver ? 'ring-2 ring-blue-400 ring-opacity-50' : ''
+										}`}
+									>
+										<span className="cursor-move flex items-center gap-2">
+											<span className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">⋮⋮</span>
+											<span>{tab.heading}</span>
+										</span>
+									</button>
+									<button
+										onClick={() => deleteTab(tab.id)}
+										className="px-2 py-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded text-sm transition-all duration-200 hover:scale-110"
+										disabled={tabsState.tabs.length <= 1}
+									>
+										−
+									</button>
+								</div>
+							);
+						})}
 					</div>
 				</div>
 
@@ -282,17 +357,17 @@ export default function Home() {
 					<h2 className="text-xl font-semibold">Tabs Content:</h2>
 					
 					{activeTab ? (
-						<div className="border border-gray-300 dark:border-gray-600 rounded p-4 min-h-[300px]">
-							<h3 className="font-semibold mb-3">{activeTab.heading}</h3>
+						<div className="border border-gray-300 dark:border-gray-600 rounded p-4 min-h-[300px] transition-all duration-300 ease-in-out transform hover:scale-[1.01]">
+							<h3 className="font-semibold mb-3 transition-colors duration-200">{activeTab.heading}</h3>
 							<textarea
 								value={activeTab.content}
 								onChange={(e) => updateTab(activeTab.id, { content: e.target.value })}
 								placeholder="Enter tab content here..."
-								className="w-full h-64 p-3 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none"
+								className="w-full h-64 p-3 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
 							/>
 						</div>
 					) : (
-						<div className="border border-gray-300 dark:border-gray-600 rounded p-4 min-h-[300px] flex items-center justify-center text-gray-500">
+						<div className="border border-gray-300 dark:border-gray-600 rounded p-4 min-h-[300px] flex items-center justify-center text-gray-500 transition-all duration-300">
 							No tabs available. Click "Add" to create your first tab.
 						</div>
 					)}
@@ -320,8 +395,8 @@ export default function Home() {
 						</div>
 					</div>
 					
-					<div className="border border-gray-300 dark:border-gray-600 rounded p-4 min-h-[300px]">
-						<pre className="text-xs text-gray-800 dark:text-gray-200 whitespace-pre-wrap overflow-auto max-h-64">
+					<div className="border border-gray-300 dark:border-gray-600 rounded p-4 min-h-[300px] transition-all duration-300 ease-in-out transform hover:scale-[1.01]">
+						<pre className="text-xs text-gray-800 dark:text-gray-200 whitespace-pre-wrap overflow-auto max-h-64 transition-all duration-200">
 							{generatedCode || 'Generated HTML code will appear here...'}
 						</pre>
 					</div>
