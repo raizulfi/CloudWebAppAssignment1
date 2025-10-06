@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
+import Hamburger from "./Hamburger";
 
 type HeaderProps = {
 	studentNumber: string;
@@ -10,6 +11,7 @@ type HeaderProps = {
 
 export default function Header({ studentNumber }: HeaderProps) {
 	const pathname = usePathname();
+	const menuId = "primary-menu";
 
 	const navItems = [
 		{ href: "/", label: "Tabs" },
@@ -24,7 +26,7 @@ export default function Header({ studentNumber }: HeaderProps) {
 			<span className="text-sm font-semibold" aria-label="Student number">
 				{studentNumber}
 			</span>
-			<nav aria-label="Main navigation" className="flex gap-3 flex-wrap items-center">
+			<nav aria-label="Main navigation" className="hidden md:flex gap-3 flex-wrap items-center" id={menuId}>
 				{navItems.map((item) => {
 					const isActive = pathname === item.href;
 					return (
@@ -42,6 +44,14 @@ export default function Header({ studentNumber }: HeaderProps) {
 				})}
 				<ThemeToggle />
 			</nav>
+			<div className="md:hidden flex items-center gap-2">
+				<ThemeToggle />
+				<Hamburger onToggle={(open)=>{
+					const el = document.getElementById("primary-menu-drawer");
+					if(!el) return;
+					el.style.display = open ? "block" : "none";
+				}} />
+			</div>
 		</header>
 	);
 }
