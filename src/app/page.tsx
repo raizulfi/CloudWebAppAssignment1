@@ -60,12 +60,20 @@ export default function Home() {
 
 		setTabsState(prev => {
 			const newTabs = prev.tabs.filter(tab => tab.id !== tabId);
+			
+			// Renumber tabs chronologically
+			const renumberedTabs = newTabs.map((tab, index) => ({
+				...tab,
+				heading: `Step ${index + 1}`,
+				order: index
+			}));
+			
 			const newActiveId = prev.activeTabId === tabId 
-				? (newTabs[0]?.id || null)
+				? (renumberedTabs[0]?.id || null)
 				: prev.activeTabId;
 			
 			return {
-				tabs: newTabs,
+				tabs: renumberedTabs,
 				activeTabId: newActiveId
 			};
 		});
@@ -78,6 +86,19 @@ export default function Home() {
 				tab.id === tabId ? { ...tab, ...updates } : tab
 			)
 		}));
+	};
+
+	// Prevent manual editing of tab headings to maintain chronological order
+	const handleTabHeadingEdit = (tabId: string, newHeading: string) => {
+		// Only allow editing if it maintains the Step X format
+		const stepPattern = /^Step \d+$/;
+		if (stepPattern.test(newHeading)) {
+			updateTab(tabId, { heading: newHeading });
+		} else {
+			// Revert to chronological numbering
+			const tabIndex = tabsState.tabs.findIndex(tab => tab.id === tabId);
+			updateTab(tabId, { heading: `Step ${tabIndex + 1}` });
+		}
 	};
 
 	const generateCode = () => {
@@ -186,23 +207,9 @@ export default function Home() {
 											: 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
 									}`}
 								>
-									{editingTab === tab.id ? (
-										<input
-											type="text"
-											value={tab.heading}
-											onChange={(e) => updateTab(tab.id, { heading: e.target.value })}
-											onBlur={() => setEditingTab(null)}
-											onKeyDown={(e) => {
-												if (e.key === 'Enter') setEditingTab(null);
-											}}
-											className="bg-transparent border-none outline-none text-inherit w-full"
-											autoFocus
-										/>
-									) : (
-										<span onClick={() => setEditingTab(tab.id)}>
-											{tab.heading}
-										</span>
-									)}
+									<span className="cursor-default">
+										{tab.heading}
+									</span>
 								</button>
 								<button
 									onClick={() => deleteTab(tab.id)}
