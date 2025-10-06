@@ -209,9 +209,12 @@ export default function Home() {
     <title>Tabs</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
-        .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }
-        .tabs { display: flex; background: #f8f9fa; border-bottom: 1px solid #dee2e6; }
-        .tab { padding: 12px 20px; cursor: pointer; border-right: 1px solid #dee2e6; background: #f8f9fa; }
+	.container { max-width: 1000px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: visible; }
+	/* Make tabs horizontally scrollable so many tabs aren't clipped */
+	.tabs { display: flex; background: #f8f9fa; border-bottom: 1px solid #dee2e6; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+	.tabs::-webkit-scrollbar { height: 8px; }
+	.tabs::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }
+	.tab { padding: 12px 20px; cursor: pointer; border-right: 1px solid #dee2e6; background: #f8f9fa; flex: 0 0 auto; white-space: nowrap; }
         .tab.active { background: white; border-bottom: 2px solid #007bff; }
         .tab:hover { background: #e9ecef; }
         .tab-content { padding: 20px; min-height: 200px; }
@@ -368,7 +371,7 @@ export default function Home() {
 						</div>
 					) : (
 						<div className="border border-gray-300 dark:border-gray-600 rounded p-4 min-h-[300px] flex items-center justify-center text-gray-500 transition-all duration-300">
-							No tabs available. Click "Add" to create your first tab.
+							No tabs available. Click &quot;Add&quot; to create your first tab.
 						</div>
 					)}
 				</div>
