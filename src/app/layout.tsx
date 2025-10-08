@@ -2,6 +2,7 @@ import "./globals.css";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import ThemeProvider from "../components/ThemeProvider";
+import LastVisitedRedirect from "../components/LastVisitedRedirect";
 
 export const metadata = {
   title: "Assignment 1",
@@ -17,6 +18,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
         <ThemeProvider>
+          <LastVisitedRedirect />
           <Header studentNumber="Student #123456" />
           <main className="min-h-screen p-6 text-gray-900 dark:text-gray-100">{children}</main>
           <Footer studentName="Your Name" studentNumber="Student #123456" />

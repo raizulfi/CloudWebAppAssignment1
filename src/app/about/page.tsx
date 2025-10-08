@@ -1,6 +1,12 @@
+
+import LastVisitedRedirect from "@/components/LastVisitedRedirect";
+
 export default function AboutPage() {
+
   return (
+    
     <div>
+       <LastVisitedRedirect />
       <h1 className="text-2xl font-bold mb-4">About Me</h1>
       <p>Name: Your Name</p>
       <p>Student Number: 123456</p>
