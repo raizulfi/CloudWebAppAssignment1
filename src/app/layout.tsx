@@ -19,9 +19,9 @@ export default function RootLayout({
       <body className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
         <ThemeProvider>
           <LastVisitedRedirect />
-          <Header studentNumber="Student #123456" />
+          <Header studentNumber="Muhammad Raihan Zulfi 22586503 " />
           <main className="min-h-screen p-6 text-gray-900 dark:text-gray-100">{children}</main>
-          <Footer studentName="Your Name" studentNumber="Student #123456" />
+          <Footer studentName="Raihan Zulfi" studentNumber="22586503" />
         </ThemeProvider>
       </body>
     </html>

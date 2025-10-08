@@ -23,10 +23,9 @@ export default function Header({ studentNumber }: HeaderProps) {
     { href: "/about", label: "About" },
     { href: "/escape-room", label: "Escape Room" },
     { href: "/coding-races", label: "Coding Races" },
-    { href: "/court-room", label: "Court Room" },
+    { href: "/pre-lab-questions", label: "Pre-Lab Questions" },
   ];
-
-  // ✅ Update cookie when clicking any nav item (including "/")
+  
   const handleNavClick = (href: string) => {
     const encoded = encodeURIComponent(href);
     document.cookie = `lastVisitedPage=${encoded}; path=/; max-age=${7 * 24 * 60 * 60}`;
