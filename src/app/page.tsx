@@ -207,29 +207,16 @@ export default function Home() {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tabs</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
-	.container { max-width: 1000px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: visible; }
-	/* Make tabs horizontally scrollable so many tabs aren't clipped */
-	.tabs { display: flex; background: #f8f9fa; border-bottom: 1px solid #dee2e6; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
-	.tabs::-webkit-scrollbar { height: 8px; }
-	.tabs::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }
-	.tab { padding: 12px 20px; cursor: pointer; border-right: 1px solid #dee2e6; background: #f8f9fa; flex: 0 0 auto; white-space: nowrap; }
-        .tab.active { background: white; border-bottom: 2px solid #007bff; }
-        .tab:hover { background: #e9ecef; }
-        .tab-content { padding: 20px; min-height: 200px; }
-        .content { white-space: pre-wrap; line-height: 1.6; }
-    </style>
 </head>
-<body>
-    <div class="container">
-        <div class="tabs">
+<body style="font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5;">
+    <div style="max-width: 1000px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: visible;">
+        <div id="tabs-container" style="display: flex; background: #f8f9fa; border-bottom: 1px solid #dee2e6; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch;">
             ${tabs.map((tab, index) => `
-                <div class="tab ${index === activeIndex ? 'active' : ''}" onclick="showTab(${index})">${tab.heading}</div>
+                <div id="tab-${index}" onclick="showTab(${index})" onmouseover="hoverTab(${index}, true)" onmouseout="hoverTab(${index}, false)" style="padding: 12px 20px; cursor: pointer; border-right: 1px solid #dee2e6; background: ${index === activeIndex ? 'white' : '#f8f9fa'}; flex: 0 0 auto; white-space: nowrap; ${index === activeIndex ? 'border-bottom: 2px solid #007bff;' : ''}">${tab.heading}</div>
             `).join('')}
         </div>
-        <div class="tab-content">
-            <div class="content">${tabs[activeIndex]?.content || ''}</div>
+        <div style="padding: 20px; min-height: 200px;">
+            <div id="content" style="white-space: pre-wrap; line-height: 1.6;">${tabs[activeIndex]?.content || ''}</div>
         </div>
     </div>
 
@@ -239,10 +226,30 @@ export default function Home() {
         
         function showTab(index) {
             currentTab = index;
-            document.querySelectorAll('.tab').forEach((tab, i) => {
-                tab.classList.toggle('active', i === index);
-            });
-            document.querySelector('.content').textContent = tabs[index].content;
+            
+            // Update all tab styles
+            for (let i = 0; i < tabs.length; i++) {
+                const tabElement = document.getElementById('tab-' + i);
+                if (i === index) {
+                    tabElement.style.background = 'white';
+                    tabElement.style.borderBottom = '2px solid #007bff';
+                } else {
+                    tabElement.style.background = '#f8f9fa';
+                    tabElement.style.borderBottom = '';
+                }
+            }
+            
+            // Update content
+            document.getElementById('content').textContent = tabs[index].content;
+        }
+        
+        function hoverTab(index, isHovering) {
+            const tabElement = document.getElementById('tab-' + index);
+            if (index !== currentTab && isHovering) {
+                tabElement.style.background = '#e9ecef';
+            } else if (index !== currentTab && !isHovering) {
+                tabElement.style.background = '#f8f9fa';
+            }
         }
     </script>
 </body>
