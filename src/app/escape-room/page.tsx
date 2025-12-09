@@ -2,6 +2,9 @@
 
 import LastVisitedRedirect from "@/components/LastVisitedRedirect";
 import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { saveGameProgress, loadGameProgress, deleteUser, updateUser } from "@/lib/api-client";
+import { clearUserCredentials, setUserCredentials } from "@/lib/user-session";
 
 interface Stage {
 	id: number;
@@ -35,9 +38,33 @@ const stages: Stage[] = [
 		description: "Convert the data from JSON to CSV format using Python:",
 		type: "convert",
 	},
+	{
+		id: 5,
+		title: "Stage 5: The Final Choice",
+		description: "Choose a door to escape. One leads to victory, one to defeat, and one to a bonus challenge!",
+		type: "format",
+	},
+	{
+		id: 6,
+		title: "Bonus Stage: Final Code Challenge",
+		description: "Complete this final challenge to achieve the ultimate victory!",
+		type: "generate",
+	},
 ];
 
 export default function EscapeRoomPage() {
+	const router = useRouter();
+	const searchParams = useSearchParams();
+	const [userId, setUserId] = useState<string | null>(null);
+	const [userTag, setUserTag] = useState<string | null>(null);
+	const [isSaving, setIsSaving] = useState(false);
+	const [saveMessage, setSaveMessage] = useState("");
+	const [updateMessage, setUpdateMessage] = useState("");
+	const [newUserTag, setNewUserTag] = useState("");
+	const [isUpdatingTag, setIsUpdatingTag] = useState(false);
+	const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+	const [bonusCode, setBonusCode] = useState("");
+
 	const [currentStage, setCurrentStage] = useState(0);
 	const [timeLimit, setTimeLimit] = useState(600); // 10 minutes default
 	const [timeRemaining, setTimeRemaining] = useState(timeLimit);
@@ -64,6 +91,102 @@ export default function EscapeRoomPage() {
 	// Stage 4: Data Conversion
 	const [conversionCode, setConversionCode] = useState("");
 	const [showHintStage4, setShowHintStage4] = useState(false);
+	const [showHintBonus, setShowHintBonus] = useState(false);
+
+	// Load user ID from localStorage and check for load game on mount
+	useEffect(() => {
+		const storedUserId = localStorage.getItem("userId");
+		const storedUserTag = localStorage.getItem("userTag");
+
+		if (!storedUserId || !storedUserTag) {
+			router.push("/escape-room/login");
+			return;
+		}
+
+		setUserId(storedUserId);
+		setUserTag(storedUserTag);
+
+		// Auto-load progress if user has a game in progress or explicitly loading
+		if (searchParams.get("loadGame") === "true" || searchParams.get("newGame") !== "true") {
+			loadSavedGame(storedUserId);
+		}
+	}, [router, searchParams]);
+
+	// Load saved game progress
+	const loadSavedGame = async (userId: string) => {
+		try {
+			const progress = await loadGameProgress(userId);
+			if (progress) {
+				setCurrentStage(progress.currentStage);
+				setTimeRemaining(progress.timeRemaining);
+				setGameStarted(progress.gameStarted);
+				setGameWon(progress.gameWon);
+				setGameLost(progress.gameLost);
+				setUserCode(progress.stage1Code || "def hello():print('Hello')if True:return 'World'");
+				setBugFound(progress.stage2BugFound);
+				setGenerateCode(progress.stage3Code || "");
+				setConversionCode(progress.stage4Code || "");
+
+				if (progress.gameStarted && !progress.gameWon && !progress.gameLost) {
+					setIsTimerRunning(true);
+				}
+			}
+		} catch (error) {
+			console.error("Failed to load game:", error);
+			setSaveMessage("Failed to load game. Starting fresh...");
+		}
+	};
+
+	const handleUpdateUserTag = async () => {
+		if (!userId) return;
+		const trimmed = newUserTag.trim();
+		if (!trimmed) {
+			setUpdateMessage("✗ Enter a new user tag");
+			return;
+		}
+
+		setIsUpdatingTag(true);
+		try {
+			const updated = await updateUser(userId, { userTag: trimmed });
+			setUserTag(updated.userTag);
+			setUserCredentials(updated.id, updated.userTag);
+			setNewUserTag("");
+			setUpdateMessage("✓ User tag updated");
+			setTimeout(() => setUpdateMessage(""), 3000);
+		} catch (error) {
+			console.error("Failed to update user tag:", error);
+			setUpdateMessage("✗ Failed to update user tag");
+			setTimeout(() => setUpdateMessage(""), 4000);
+		} finally {
+			setIsUpdatingTag(false);
+		}
+	};
+
+	// Auto-save game progress every 30 seconds while playing
+	useEffect(() => {
+		if (!userId || !gameStarted || gameWon || gameLost) return;
+
+		const autoSaveInterval = setInterval(async () => {
+			try {
+				await saveGameProgress({
+					userId,
+					currentStage,
+					timeRemaining,
+					stage1Code: userCode,
+					stage2BugFound: bugFound,
+					stage3Code: generateCode,
+					stage4Code: conversionCode,
+					gameStarted,
+					gameWon,
+					gameLost,
+				});
+			} catch (error) {
+				console.error("Auto-save failed:", error);
+			}
+		}, 30000); // Auto-save every 30 seconds
+
+		return () => clearInterval(autoSaveInterval);
+	}, [userId, currentStage, timeRemaining, userCode, bugFound, generateCode, conversionCode, gameStarted, gameWon, gameLost]);
 
 	// Timer effect
 	useEffect(() => {
@@ -77,6 +200,15 @@ export default function EscapeRoomPage() {
 			setIsTimerRunning(false);
 		}
 	}, [isTimerRunning, timeRemaining, gameWon, gameLost]);
+
+	// Delete user when game is lost
+	useEffect(() => {
+		if (gameLost && userId) {
+			deleteUser(userId)
+				.then(() => clearUserCredentials())
+				.catch(error => console.error("Failed to delete user:", error));
+		}
+	}, [gameLost, userId]);
 
 	const startGame = () => {
 		setGameStarted(true);
@@ -93,6 +225,119 @@ export default function EscapeRoomPage() {
 		setShowHintStage4(false);
 		setGenerateCode("");
 		setConversionCode("");
+		setBonusCode("");
+		setShowHintBonus(false);
+		setSaveMessage("");
+	};
+
+	// Logout with save confirmation
+	const handleDoorChoice = (door: number) => {
+		if (door === 1) {
+			// Instant win
+			setGameWon(true);
+			setIsTimerRunning(false);
+			if (userId) {
+				deleteUser(userId)
+					.then(() => clearUserCredentials())
+					.catch(error => console.error("Failed to delete user:", error));
+			}
+		} else if (door === 2) {
+			// Instant loss
+			setGameLost(true);
+			setIsTimerRunning(false);
+		} else if (door === 3) {
+			// Bonus stage - move to stage 6
+			setCurrentStage(5);
+		}
+	};
+
+	const checkBonusStage = async () => {
+		try {
+			const pyCode = bonusCode.trim();
+			const pyCodeLower = pyCode.toLowerCase();
+			
+			// Accept multiple valid approaches to generating Fibonacci
+			// Pattern 1: a, b with loop and print/append
+			const hasABLoop = /a\s*=\s*0/.test(pyCode) && /b\s*=\s*1/.test(pyCode) && 
+				/(for|while)/.test(pyCode) && /(print|append)/.test(pyCode);
+			
+			// Pattern 2: list with append
+			const hasListAppend = /(fib|numbers|result|sequence)\s*=\s*\[/.test(pyCodeLower) && 
+				/append/.test(pyCodeLower);
+			
+			// Pattern 3: Using fib function
+			const hasFibFunction = /def\s+\w*fib/.test(pyCodeLower);
+			
+			// Pattern 4: Simple loop with range(10)
+			const hasRangeLoop = /for\s+\w+\s+in\s+range\s*\(\s*10\s*\)/.test(pyCodeLower);
+			
+			const hasFibLogic = hasABLoop || hasListAppend || hasFibFunction || hasRangeLoop;
+			
+			if (hasFibLogic) {
+				setGameWon(true);
+				setIsTimerRunning(false);
+				
+				if (userId) {
+					try {
+						await deleteUser(userId);
+						clearUserCredentials();
+					} catch (error) {
+						console.error("Failed to delete user:", error);
+					}
+				}
+			} else {
+				alert("Not quite right! Your code should generate the first 10 Fibonacci numbers. Make sure you:\n1. Start with a=0, b=1\n2. Use a loop (for or while)\n3. Calculate and print/store each number (a = a + b or similar)\n4. Generate exactly 10 numbers");
+			}
+		} catch {
+			alert("There's an error in your code. Try again!");
+		}
+	};
+
+	const handleLogout = () => {
+		if (gameStarted && !gameWon && !gameLost) {
+			setShowLogoutDialog(true);
+		} else {
+			clearUserCredentials();
+			router.push("/escape-room/login");
+		}
+	};
+
+	const confirmLogout = async (saveBeforeLogout: boolean) => {
+		if (saveBeforeLogout && userId) {
+			await handleSaveProgress();
+		}
+		clearUserCredentials();
+		setShowLogoutDialog(false);
+		router.push("/escape-room/login");
+	};
+
+	// Manual save function
+	const handleSaveProgress = async () => {
+		if (!userId) return;
+
+		setIsSaving(true);
+		try {
+			await saveGameProgress({
+				userId,
+				currentStage,
+				timeRemaining,
+				stage1Code: userCode,
+				stage2BugFound: bugFound,
+				stage3Code: generateCode,
+				stage4Code: conversionCode,
+				gameStarted,
+				gameWon,
+				gameLost,
+			});
+			setSaveMessage("✓ Progress saved!");
+			setTimeout(() => setSaveMessage(""), 3000);
+		} catch (error) {
+			console.error("Failed to save:", error);
+			setSaveMessage("✗ Failed to save progress");
+			setTimeout(() => setSaveMessage(""), 3000);
+		} finally {
+			setIsSaving(false);
+		}
 	};
 
 	const formatTime = (seconds: number) => {
@@ -143,7 +388,7 @@ export default function EscapeRoomPage() {
 		}
 	};
 
-	const checkStage4 = () => {
+	const checkStage4 = async () => {
 		try {
 			const pyCode = conversionCode.trim().toLowerCase();
 			// Check if they're parsing the data and printing CSV format
@@ -152,8 +397,7 @@ export default function EscapeRoomPage() {
 			const hasLoop = pyCode.includes("for") && pyCode.includes("in data");
 			
 			if (hasDataParse && hasPrintHeader && hasLoop) {
-				setGameWon(true);
-				setIsTimerRunning(false);
+				nextStage();
 			} else {
 				alert("Not quite right! Make sure you:\n1. Parse the JSON with json.loads()\n2. Print the header 'name,age'\n3. Loop through the data and print each row");
 			}
@@ -186,6 +430,8 @@ export default function EscapeRoomPage() {
 				setGenerateCode(newValue);
 			} else if (currentStage === 3) {
 				setConversionCode(newValue);
+			} else if (currentStage === 5) {
+				setBonusCode(newValue);
 			}
 
 			// Set cursor position after the inserted tab
@@ -197,6 +443,106 @@ export default function EscapeRoomPage() {
 
 	const renderStage = () => {
 		const stage = stages[currentStage];
+
+		// Stage 5: Door Choice
+		if (currentStage === 4) {
+			return (
+				<div className="space-y-6">
+					<p className="text-lg text-gray-900 dark:text-gray-100 text-center mb-8">
+						🚪 You&apos;ve reached the final chamber! Choose a door to escape:
+					</p>
+					<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+						{/* Door 1 - Victory */}
+						<div
+							onClick={() => handleDoorChoice(1)}
+							className="cursor-pointer transform hover:scale-105 transition-transform"
+						>
+							<div className="bg-gradient-to-br from-green-400 to-green-600 p-8 rounded-lg shadow-xl hover:shadow-2xl transition-shadow h-48 flex flex-col items-center justify-center border-4 border-green-700 hover:border-green-800">
+								<div className="text-6xl mb-4">🚪</div>
+								<h3 className="text-xl font-bold text-white text-center">Door 1</h3>
+								<p className="text-sm text-green-100 text-center mt-2">The Safe Path</p>
+							</div>
+						</div>
+
+						{/* Door 2 - Instant Loss */}
+						<div
+							onClick={() => handleDoorChoice(2)}
+							className="cursor-pointer transform hover:scale-105 transition-transform"
+						>
+							<div className="bg-gradient-to-br from-red-400 to-red-600 p-8 rounded-lg shadow-xl hover:shadow-2xl transition-shadow h-48 flex flex-col items-center justify-center border-4 border-red-700 hover:border-red-800">
+								<div className="text-6xl mb-4">🚪</div>
+								<h3 className="text-xl font-bold text-white text-center">Door 2</h3>
+								<p className="text-sm text-red-100 text-center mt-2">The Risky Path</p>
+							</div>
+						</div>
+
+						{/* Door 3 - Bonus Stage */}
+						<div
+							onClick={() => handleDoorChoice(3)}
+							className="cursor-pointer transform hover:scale-105 transition-transform"
+						>
+							<div className="bg-gradient-to-br from-yellow-400 to-yellow-600 p-8 rounded-lg shadow-xl hover:shadow-2xl transition-shadow h-48 flex flex-col items-center justify-center border-4 border-yellow-700 hover:border-yellow-800">
+								<div className="text-6xl mb-4">🚪</div>
+								<h3 className="text-xl font-bold text-white text-center">Door 3</h3>
+								<p className="text-sm text-yellow-100 text-center mt-2">The Challenge Path</p>
+							</div>
+						</div>
+					</div>
+					<p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
+						Choose wisely! One leads to instant victory, one to defeat, and one to an ultimate bonus challenge!
+					</p>
+				</div>
+			);
+		}
+
+		// Bonus Stage
+		if (currentStage === 5) {
+			return (
+				<div className="space-y-4">
+					<p className="text-lg mb-4 text-gray-900 dark:text-gray-100">{stages[5].description}</p>
+					<div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+						<p className="text-sm mb-2 text-gray-700 dark:text-gray-300">
+							<strong>Challenge:</strong> Generate the first 10 numbers of the Fibonacci sequence!
+						</p>
+						<p className="text-xs text-gray-500 dark:text-gray-400">
+							Fibonacci sequence: 0, 1, 1, 2, 3, 5, 8, 13, 21, 34 (each number is the sum of the two preceding ones)
+						</p>
+					</div>
+					<textarea
+						value={bonusCode}
+						onChange={(e) => setBonusCode(e.target.value)}
+						onKeyDown={handleTabKey}
+						className="w-full h-48 p-4 bg-gray-50 dark:bg-gray-900 text-blue-700 dark:text-blue-300 font-mono text-sm rounded-lg border border-gray-300 dark:border-gray-700 focus:border-blue-500 focus:outline-none"
+						placeholder="# Write your Fibonacci code here..."
+					/>
+					<div className="flex gap-3">
+						<button
+							onClick={() => setShowHintBonus(!showHintBonus)}
+							className="px-6 py-2 bg-yellow-500 hover:bg-yellow-600 rounded-lg font-semibold transition-colors text-white"
+						>
+							{showHintBonus ? "Hide Hint" : "Show Hint"}
+						</button>
+						<button
+							onClick={checkBonusStage}
+							className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors text-white"
+						>
+							Submit Code
+						</button>
+					</div>
+					{showHintBonus && (
+						<div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 p-4 rounded-lg">
+							<p className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2">💡 Hint:</p>
+							<ul className="text-sm text-gray-700 dark:text-gray-300 space-y-2 list-disc list-inside">
+								<li>Start with two variables: <code className="bg-white dark:bg-gray-800 px-1 rounded">a = 0</code> and <code className="bg-white dark:bg-gray-800 px-1 rounded">b = 1</code></li>
+								<li>Use a loop to generate the sequence (e.g., <code className="bg-white dark:bg-gray-800 px-1 rounded">for i in range(10)</code>)</li>
+								<li>In each iteration, print the current value and update: <code className="bg-white dark:bg-gray-800 px-1 rounded">a, b = b, a + b</code></li>
+								<li>Print or store the Fibonacci numbers</li>
+							</ul>
+						</div>
+					)}
+				</div>
+			);
+		}
 
 		switch (stage.type) {
 			case "format":
@@ -420,6 +766,9 @@ json_str = '[{"name":"John","age":30},{"name":"Jane","age":25}]'
 						)}
 					</div>
 				);
+
+			default:
+				return null;
 		}
 	};
 
@@ -434,15 +783,13 @@ json_str = '[{"name":"John","age":30},{"name":"Jane","age":25}]'
 			}}>
 				<div className="container mx-auto px-4 py-8">
 					<div className="text-center mb-8">
-						<h1 className="text-4xl font-bold mb-2 text-gray-900 dark:text-gray-100 text-2xl drop-shadow-lg  bg-white dark:bg-gray-800 bg-opacity-70 rounded-lg inline-block px-6 py-2">
+						<h1 className="text-4xl font-bold mb-2 text-gray-900 dark:text-gray-100 drop-shadow-lg bg-white dark:bg-gray-800 bg-opacity-70 rounded-lg inline-block px-6 py-2">
 							🔐 Escape Room Challenge
 						</h1>
 						<p className="font-bold text-gray-900 dark:text-gray-100 text-2xl drop-shadow-lg  bg-white dark:bg-gray-800 bg-opacity-70 rounded-lg inline-block px-6 py-2">
 							Code your way out! Complete all stages before time runs out. 🫡
 						</p>
-					</div>
-
-					{!gameStarted ? (
+					</div>					{!gameStarted ? (
 						<div className="max-w-md mx-auto bg-white dark:bg-gray-800 p-8 rounded-lg shadow-2xl border border-gray-300 dark:border-gray-700">
 							<h2 className="text-2xl font-bold mb-6 text-center text-gray-900 dark:text-gray-100">
 								Set Your Timer
@@ -499,7 +846,7 @@ json_str = '[{"name":"John","age":30},{"name":"Jane","age":25}]'
 								All stages completed successfully. You&apos;re a coding master!
 							</p>
 							<button
-								onClick={startGame}
+								onClick={() => router.push('/escape-room/login')}
 								className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-lg transition-colors"
 							>
 								Play Again
@@ -521,7 +868,7 @@ json_str = '[{"name":"John","age":30},{"name":"Jane","age":25}]'
 								stages.
 							</p>
 							<button
-								onClick={startGame}
+								onClick={() => router.push('/escape-room/login')}
 								className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-lg transition-colors"
 							>
 								Try Again
@@ -551,14 +898,62 @@ json_str = '[{"name":"John","age":30},{"name":"Jane","age":25}]'
 											))}
 										</div>
 									</div>
-									<div
-										className={`text-2xl font-bold ${
-											timeRemaining < 60 ? "text-red-500 animate-pulse" : "text-yellow-600 dark:text-yellow-400"
-										}`}
-									>
-										⏱️ {formatTime(timeRemaining)}
+									<div className="flex items-center gap-4">
+										<div
+											className={`text-2xl font-bold ${
+												timeRemaining < 60 ? "text-red-500 animate-pulse" : "text-yellow-600 dark:text-yellow-400"
+											}`}
+										>
+											⏱️ {formatTime(timeRemaining)}
+										</div>
+										<button
+											onClick={handleSaveProgress}
+											disabled={isSaving}
+											className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-lg font-semibold text-sm transition-colors"
+										>
+											{isSaving ? "Saving..." : "💾 Save"}
+										</button>
+										<button
+											onClick={handleLogout}
+											className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold text-sm transition-colors"
+										>
+											🚪 Logout
+										</button>
 									</div>
 								</div>
+								{userTag && (
+									<div className="flex flex-col md:flex-row md:items-center gap-3 mb-2">
+										<div className="text-sm text-gray-700 dark:text-gray-300">
+											Current tag: <span className="font-semibold text-blue-700 dark:text-blue-300">{userTag}</span>
+										</div>
+										<div className="flex flex-1 gap-2 items-center">
+											<input
+												type="text"
+												value={newUserTag}
+												onChange={(e) => setNewUserTag(e.target.value)}
+												placeholder="Enter new tag"
+												className="w-full md:w-64 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800"
+											/>
+											<button
+												onClick={handleUpdateUserTag}
+												disabled={isUpdatingTag}
+												className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-semibold text-sm transition-colors"
+											>
+												{isUpdatingTag ? "Updating..." : "Update Tag"}
+											</button>
+										</div>
+										{updateMessage && (
+											<div className={`text-xs ${updateMessage.includes("✓") ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+												{updateMessage}
+											</div>
+										)}
+									</div>
+								)}
+								{saveMessage && (
+									<div className={`text-sm mb-2 ${saveMessage.includes("✓") ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+										{saveMessage}
+									</div>
+								)}
 								<div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
 									<div
 										className="bg-blue-500 h-2 rounded-full transition-all duration-300"
@@ -580,6 +975,40 @@ json_str = '[{"name":"John","age":30},{"name":"Jane","age":25}]'
 					)}
 				</div>
 			</div>
+
+			{/* Logout Confirmation Dialog */}
+			{showLogoutDialog && (
+				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+					<div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 max-w-md w-full border-2 border-gray-300 dark:border-gray-600">
+						<h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">
+							⚠️ Save Your Progress?
+						</h3>
+						<p className="text-gray-700 dark:text-gray-300 mb-6">
+							You have a game in progress. Would you like to save your progress before logging out?
+						</p>
+						<div className="flex gap-3">
+							<button
+								onClick={() => confirmLogout(true)}
+								className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
+							>
+								💾 Save & Logout
+							</button>
+							<button
+								onClick={() => confirmLogout(false)}
+								className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors"
+							>
+								🚪 Logout Without Saving
+							</button>
+							<button
+								onClick={() => setShowLogoutDialog(false)}
+								className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-semibold transition-colors"
+							>
+								Cancel
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
 		</section>
 	);
 }
