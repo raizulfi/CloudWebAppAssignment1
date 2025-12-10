@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useEffect } from "react";
+import { useId } from "react";
 
 type Props = {
 	label?: string;

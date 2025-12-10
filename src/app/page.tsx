@@ -6,13 +6,13 @@ import { loadTabsFromStorage, saveTabsToStorage, generateTabId } from '../utils/
 
 export default function Home() {
 	const [tabsState, setTabsState] = useState<TabsState>({ tabs: [], activeTabId: null });
-	const [editingTab, setEditingTab] = useState<string | null>(null);
+	// const [editingTab, setEditingTab] = useState<string | null>(null);
 	const [generatedCode, setGeneratedCode] = useState<string>('');
 	const [draggedTab, setDraggedTab] = useState<string | null>(null);
-	const [isAnimating, setIsAnimating] = useState(false);
-	const [previousTabs, setPreviousTabs] = useState<Tab[]>([]);
+	// const [isAnimating, setIsAnimating] = useState(false);
+	// const [previousTabs, setPreviousTabs] = useState<Tab[]>([]);
 	const [dragOverTab, setDragOverTab] = useState<string | null>(null);
-	const [previewOrder, setPreviewOrder] = useState<number[]>([]);
+	// const [previewOrder, setPreviewOrder] = useState<number[]>([]);
 
 	// Load tabs from localStorage on mount
 	useEffect(() => {
@@ -35,6 +35,7 @@ export default function Home() {
 		if (tabsState.tabs.length > 0) {
 			generateCode();
 		}
+	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [tabsState.tabs]);
 
 	const addTab = () => {
@@ -63,31 +64,25 @@ export default function Home() {
 			return;
 		}
 
-		setIsAnimating(true);
-		setPreviousTabs(tabsState.tabs);
-
-		setTimeout(() => {
-			setTabsState(prev => {
-				const newTabs = prev.tabs.filter(tab => tab.id !== tabId);
-				
-				// Renumber tabs chronologically
-				const renumberedTabs = newTabs.map((tab, index) => ({
-					...tab,
-					heading: `Step ${index + 1}`,
-					order: index
-				}));
-				
-				const newActiveId = prev.activeTabId === tabId 
-					? (renumberedTabs[0]?.id || null)
-					: prev.activeTabId;
-				
-				return {
-					tabs: renumberedTabs,
-					activeTabId: newActiveId
-				};
-			});
-			setIsAnimating(false);
-		}, 300);
+		setTabsState(prev => {
+			const newTabs = prev.tabs.filter(tab => tab.id !== tabId);
+			
+			// Renumber tabs chronologically
+			const renumberedTabs = newTabs.map((tab, index) => ({
+				...tab,
+				heading: `Step ${index + 1}`,
+				order: index
+			}));
+			
+			const newActiveId = prev.activeTabId === tabId 
+				? (renumberedTabs[0]?.id || null)
+				: prev.activeTabId;
+			
+			return {
+				tabs: renumberedTabs,
+				activeTabId: newActiveId
+			};
+		});
 	};
 
 	const updateTab = (tabId: string, updates: Partial<Pick<Tab, 'heading' | 'content'>>) => {
@@ -102,7 +97,7 @@ export default function Home() {
 	// Drag and drop functionality with real-time preview
 	const handleDragStart = (e: React.DragEvent, tabId: string) => {
 		setDraggedTab(tabId);
-		setPreviewOrder(tabsState.tabs.map((_, index) => index));
+		// setPreviewOrder(tabsState.tabs.map((_, index) => index));
 		e.dataTransfer.effectAllowed = 'move';
 		e.dataTransfer.setData('text/html', tabId);
 	};
@@ -132,13 +127,13 @@ export default function Home() {
 		newOrder.splice(newTargetIndex, 0, draggedTabData);
 		
 		// Update preview order
-		const previewIndices = newOrder.map((_, index) => index);
-		setPreviewOrder(previewIndices);
+		// const previewIndices = newOrder.map((_, index) => index);
+		// setPreviewOrder(previewIndices);
 	};
 
 	const handleDragLeave = () => {
 		setDragOverTab(null);
-		setPreviewOrder(tabsState.tabs.map((_, index) => index));
+		// setPreviewOrder(tabsState.tabs.map((_, index) => index));
 	};
 
 	const handleDrop = (e: React.DragEvent, targetTabId: string) => {
@@ -147,7 +142,7 @@ export default function Home() {
 		if (!draggedTab || draggedTab === targetTabId) {
 			setDraggedTab(null);
 			setDragOverTab(null);
-			setPreviewOrder([]);
+			// setPreviewOrder([]);
 			return;
 		}
 
@@ -157,7 +152,7 @@ export default function Home() {
 		if (draggedIndex === -1 || targetIndex === -1) {
 			setDraggedTab(null);
 			setDragOverTab(null);
-			setPreviewOrder([]);
+			// setPreviewOrder([]);
 			return;
 		}
 
@@ -183,13 +178,13 @@ export default function Home() {
 
 		setDraggedTab(null);
 		setDragOverTab(null);
-		setPreviewOrder([]);
+		// setPreviewOrder([]);
 	};
 
 	const handleDragEnd = () => {
 		setDraggedTab(null);
 		setDragOverTab(null);
-		setPreviewOrder([]);
+		// setPreviewOrder([]);
 	};
 
 	const generateCode = () => {

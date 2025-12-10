@@ -1,4 +1,4 @@
-import { Tab, TabsState } from '../types/tab';
+import { TabsState } from '../types/tab';
 
 const STORAGE_KEY = 'assignment-tabs';
 
